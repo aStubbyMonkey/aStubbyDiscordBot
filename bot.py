@@ -297,6 +297,10 @@ class ColorRoleView(discord.ui.View):
 async def on_ready():
     bot.add_view(ColorRoleView())
     bot.add_view(RemoveView())
+    await bot.change_presence(activity=discord.Activity(
+        type=discord.ActivityType.watching,
+        name="👁️ aStubbyServer",
+    ))
     print(f"✅ Online as {bot.user}")
 
 
