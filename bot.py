@@ -1,4 +1,7 @@
 import os
+import asyncio
+import random
+from datetime import datetime, timedelta
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -376,6 +379,193 @@ async def on_message(message):
         await message.delete()
         return
     await bot.process_commands(message)
+
+
+
+
+active_giveaways: dict[int, dict] = {}
+
+
+def parse_duration(duration: str) -> int | None:
+    units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+    if duration[-1] in units:
+        try:
+            return int(duration[:-1]) * units[duration[-1]]
+        except ValueError:
+            return None
+    return None
+
+
+class GiveawayEnterButton(discord.ui.Button):
+    def __init__(self, giveaway_id: int):
+        super().__init__(
+            label="Enter Giveaway",
+            emoji="🎉",
+            custom_id=f"giveaway_enter_{giveaway_id}",
+            style=discord.ButtonStyle.success,
+        )
+        self.giveaway_id = giveaway_id
+
+    async def callback(self, interaction: discord.Interaction):
+        giveaway = active_giveaways.get(self.giveaway_id)
+        if not giveaway:
+            await interaction.response.send_message(
+                "❌ This giveaway has already ended.", ephemeral=True
+            )
+            return
+
+        member = interaction.user
+        member_roles = {r.id for r in member.roles}
+        required_roles = giveaway["required_roles"]
+
+        if not any(r in member_roles for r in required_roles):
+            role_mentions = ", ".join(f"<@&{r}>" for r in required_roles)
+            await interaction.response.send_message(
+                f"🔒 You need one of these roles to enter: {role_mentions}",
+                ephemeral=True,
+            )
+            return
+
+        if member.id in giveaway["entries"]:
+            giveaway["entries"].discard(member.id)
+            await interaction.response.send_message(
+                "✅ You've withdrawn from the giveaway.", ephemeral=True
+            )
+            return
+
+        giveaway["entries"].add(member.id)
+        await interaction.response.send_message(
+            "🎉 You're entered! Good luck!", ephemeral=True
+        )
+
+
+class GiveawayView(discord.ui.View):
+    def __init__(self, giveaway_id: int):
+        super().__init__(timeout=None)
+        self.add_item(GiveawayEnterButton(giveaway_id))
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def giveaway(ctx, *args):
+    await ctx.message.delete()
+
+    roles = []
+    remaining = list(args)
+
+    for arg in list(args):
+        if arg.startswith("<@&") and arg.endswith(">"):
+            try:
+                role_id = int(arg[3:-1])
+                role = ctx.guild.get_role(role_id)
+                if role:
+                    roles.append(role)
+                    remaining.remove(arg)
+            except ValueError:
+                pass
+        elif arg.startswith("<@") and arg.endswith(">"):
+            try:
+                user_id = int(arg[2:-1].lstrip("!"))
+                member = ctx.guild.get_member(user_id)
+                if member:
+                    roles.append(member)
+                    remaining.remove(arg)
+            except ValueError:
+                pass
+
+    if not remaining:
+        await ctx.send("❌ Usage: `!giveaway @Role 1h 1 Title | Description | Prize`", delete_after=10)
+        return
+
+    duration_str = remaining.pop(0)
+    seconds = parse_duration(duration_str)
+    if not seconds:
+        await ctx.send("❌ Invalid duration. Use s, m, h, or d. e.g. 5h", delete_after=10)
+        return
+
+    try:
+        winner_count = int(remaining.pop(0))
+    except (ValueError, IndexError):
+        await ctx.send("❌ Specify number of winners. e.g. 1", delete_after=10)
+        return
+
+    text = " ".join(remaining)
+    parts = [p.strip() for p in text.split("|")]
+    if len(parts) < 3:
+        await ctx.send("❌ Use Title | Description | Prize format.", delete_after=10)
+        return
+
+    title, description, prize = parts[0], parts[1], parts[2]
+    end_time = datetime.utcnow() + timedelta(seconds=seconds)
+    giveaway_id = ctx.message.id
+
+    required_role_ids = []
+    role_mentions = []
+    for r in roles:
+        if isinstance(r, discord.Role):
+            required_role_ids.append(r.id)
+            role_mentions.append(r.mention)
+        elif isinstance(r, discord.Member):
+            required_role_ids.append(r.id)
+            role_mentions.append(r.mention)
+
+    active_giveaways[giveaway_id] = {
+        "channel_id": ctx.channel.id,
+        "entries": set(),
+        "required_roles": required_role_ids,
+        "winner_count": winner_count,
+        "end_time": end_time,
+        "prize": prize,
+    }
+
+    icon = ctx.guild.icon.url if ctx.guild.icon else None
+    embed = discord.Embed(color=0xFFD700, title=f"🎉  {title}")
+    embed.set_author(name="aStubbyServer  ·  Giveaway", icon_url=icon)
+    embed.description = description
+    embed.add_field(name="🏆 Prize", value=prize, inline=True)
+    embed.add_field(name="👥 Winners", value=str(winner_count), inline=True)
+    embed.add_field(name="🔒 Required", value="\n".join(role_mentions) if role_mentions else "@everyone", inline=True)
+    embed.add_field(name="⏰ Ends", value=f"<t:{int(end_time.timestamp())}:R>", inline=True)
+    embed.set_footer(text="Click the button below to enter · Click again to withdraw")
+
+    msg = await ctx.send(embed=embed, view=GiveawayView(giveaway_id))
+    active_giveaways[giveaway_id]["message_id"] = msg.id
+
+    await asyncio.sleep(seconds)
+    await end_giveaway(ctx.guild, giveaway_id)
+
+
+async def end_giveaway(guild: discord.Guild, giveaway_id: int):
+    giveaway = active_giveaways.pop(giveaway_id, None)
+    if not giveaway:
+        return
+
+    channel = guild.get_channel(giveaway["channel_id"])
+    if not channel:
+        return
+
+    entries = list(giveaway["entries"])
+    winner_count = giveaway["winner_count"]
+    prize = giveaway["prize"]
+
+    if not entries:
+        embed = discord.Embed(
+            color=0xFF4444,
+            title="🎉  Giveaway Ended",
+            description="Nobody entered the giveaway. No winners this time!"
+        )
+        await channel.send(embed=embed)
+        return
+
+    winners = random.sample(entries, min(winner_count, len(entries)))
+    winner_mentions = " ".join(f"<@{w}>" for w in winners)
+
+    embed = discord.Embed(color=0xFFD700, title="🎉  Giveaway Ended!")
+    embed.add_field(name="🏆 Prize", value=prize, inline=False)
+    embed.add_field(name="🎊 Winner(s)", value=winner_mentions, inline=False)
+    embed.set_footer(text="Congratulations!")
+
+    await channel.send(content=winner_mentions, embed=embed)
 
 
 bot.run(TOKEN)
