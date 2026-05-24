@@ -388,6 +388,9 @@ active_giveaways: dict[int, dict] = {}
 
 def parse_duration(duration: str) -> int | None:
     units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+    duration = duration.strip().lower()
+    if len(duration) < 2:
+        return None
     if duration[-1] in units:
         try:
             return int(duration[:-1]) * units[duration[-1]]
@@ -416,6 +419,14 @@ class GiveawayEnterButton(discord.ui.Button):
 
         member = interaction.user
         member_roles = {r.id for r in member.roles}
+
+        if 1508135702511095868 in member_roles:
+            await interaction.response.send_message(
+                "🚫 You are banned from entering giveaways.",
+                ephemeral=True,
+            )
+            return
+
         required_roles = giveaway["required_roles"]
 
         if not any(r in member_roles for r in required_roles):
@@ -497,7 +508,8 @@ async def giveaway(ctx, *args):
 
     title, description, prize = parts[0], parts[1], parts[2]
     end_time = datetime.utcnow() + timedelta(seconds=seconds)
-    giveaway_id = ctx.message.id
+    import time
+    giveaway_id = int(time.time() * 1000)
 
     required_role_ids = []
     role_mentions = []
