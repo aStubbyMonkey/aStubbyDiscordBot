@@ -26,7 +26,7 @@ COLORS_TO_CREATE = [
     ("Emerald",             0x00CC66, "Level 30"),
     ("Magenta",             0xFF00AA, "Level 30"),
     ("Indigo",              0x4444CC, "Level 30"),
-    ("District Purple",     0x5B0099, "Level 50"),
+    ("Backstage Pass",     0x5B0099, "Level 50"),
     ("Blood Red",           0x8B0000, "Level 75"),
     ("Void",                0x1A0033, "Level 75"),
     ("Toxic",               0x39FF14, "Level 75"),
@@ -78,9 +78,9 @@ TIERS = [
     {
         "required_id":   1446345091072524368,
         "required_name": "Level 50",
-        "label":         "✦ District Color",
+        "label":         "✦ Backstage Pass",
         "colors": [
-            ("District Purple", "🌑"),
+            ("Backstage Pass", "🌑"),
         ],
     },
     {
@@ -120,7 +120,7 @@ TIERS = [
         ],
     },
     {
-        "required_id":   1505734653322072074,
+        "required_id":   1519568958192357488,
         "required_name": "Server Booster",
         "label":         "✦ Booster Exclusive",
         "colors": [
@@ -133,7 +133,7 @@ COLOR_ROLE_IDS: dict[str, int] = {
     "Blood Red":           1505743622946029568,
     "Blue":                1505743604218462350,
     "Crimson":             1505743614557421681,
-    "District Purple":     1505743621511712778,
+    "Backstage Pass":     1505743621511712778,
     "Emerald":             1505743616633737226,
     "Galaxy":              1505743628100702329,
     "VIP Gold":            1505743630772473859,
@@ -359,7 +359,7 @@ async def setup_colors(ctx):
         "🟣 **Rare** `Lv 15`　"
         "💎 **Epic** `Lv 30`　"
         "🌌 **Legendary** `Lv 75`\n\n"
-        "🌑 **District Purple** `Lv 50`　"
+        "🌑 **Backstage Pass** `Lv 50`　"
         "🩶 **Special Silver** `Lv 125`　"
         "✨ **VIP Gold** `Lv 150`　"
         "👑 **aStubbyMonkey Purple** `Lv 200`　"
